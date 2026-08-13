@@ -21,7 +21,7 @@ html, body {
   font-size: 15px;
 }
 
-.container { max-width: 1100px; margin: 0 auto; padding: 24px 20px 64px; }
+.container { max-width: 1600px; width: 96%; margin: 0 auto; padding: 24px 20px 64px; }
 
 .app-header { border-bottom: 3px solid var(--uhd-red); padding-bottom: 12px; margin-bottom: 20px; }
 .app-header h1 { margin: 0; font-size: 22px; }
@@ -86,8 +86,16 @@ tbody select { padding: 5px 7px; border: 1px solid var(--line); border-radius: 6
 .transfer-form { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
 .transfer-form .qty-input { width: 56px; }
 .transfer-form select { padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.transfer-form input[type="text"],
+.transfer-form input[type="date"] {
+  padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px;
+}
 .transfer-form button {
   font-size: 13px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px;
   background: #fff; cursor: pointer;
 }
 .transfer-form button[type="submit"] { border-color: var(--uhd-red); color: var(--uhd-red); }
+
+.order-form { flex-wrap: wrap; min-width: 420px; }
+.order-form input[type="text"] { width: 110px; }
+.order-form input[type="number"] { width: 64px; }

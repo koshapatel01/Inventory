@@ -22,7 +22,13 @@ export default async function Page() {
       <header className="app-header">
         <h1>Supply Inventory &amp; Purchasing Status</h1>
         <p className="subtitle">UHD IT PMO · S755 · S821 · TLS</p>
-        <p className="subtitle"><Link href="/transfers">View transfer history →</Link></p>
+        <p className="subtitle">
+          <Link href="/transfers">View transfer history →</Link>
+          {' · '}
+          <Link href="/orders">View order history →</Link>
+          {' · '}
+          <Link href="/receiving-log">View receiving log →</Link>
+        </p>
       </header>
 
       {error ? (
