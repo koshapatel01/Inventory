@@ -43,6 +43,8 @@ export default async function Page() {
           <Link href="/orders">View order history →</Link>
           {' · '}
           <Link href="/receiving-log">View receiving log →</Link>
+          {' · '}
+          <Link href="/cost-analysis">View cost analysis →</Link>
         </p>
       </header>
 

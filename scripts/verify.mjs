@@ -16,6 +16,18 @@ import {
   summarize,
 } from '../lib/inventory.js';
 import { parseInvoiceText, matchLineItemToCatalog } from '../lib/invoiceParser.js';
+import {
+  extendedTotalFor,
+  isMissingPrice,
+  monthKey,
+  buildSpendRecords,
+  filterRecords,
+  summarize as summarizeSpend,
+  summarizeItem,
+  buildMonthlySeries,
+  buildCategoryTotals,
+  rankItemsBySpend,
+} from '../lib/costAnalysis.js';
 
 const COLUMN_MAP = {
   sku: 'SKU', name: 'Item Name', category: 'Category',
@@ -525,5 +537,92 @@ assert.equal(
 );
 assert.equal(matchLineItemToCatalog({ sku: 'TWG09180', description: '' }, fakeCatalog)?.rowId, 2, 'exact SKU match still takes priority');
 assert.equal(matchLineItemToCatalog({ sku: null, description: 'totally unrelated text' }, fakeCatalog), null, 'no match found is null, not a crash');
+
+// ── Cost analysis dashboard ──────────────────────────────────────────
+// Order Placed records shaped like lib/localStore.js's toOrder(), covering:
+// two Office items, one Breakroom item, a cancelled order (still counted —
+// cancelling doesn't undo the fact that an order was placed), and one with
+// a missing ($0) unit price that should be flagged, not silently dropped.
+const costOrders = [
+  { id: 'o1', rowId: '1', itemName: 'Pens', itemNumber: 'PEN1', quantityOrdered: 10, unitPrice: 2, estimatedTotal: 20, orderDate: '2026-01-15', vendor: 'Gateway', status: 'Received' },
+  { id: 'o2', rowId: '1', itemName: 'Pens', itemNumber: 'PEN1', quantityOrdered: 5, unitPrice: 2, estimatedTotal: 10, orderDate: '2026-02-10', vendor: 'Gateway', status: 'Ordered' },
+  { id: 'o3', rowId: '2', itemName: 'Coffee', itemNumber: 'COF1', quantityOrdered: 4, unitPrice: 12.5, estimatedTotal: 50, orderDate: '2026-02-20', vendor: 'Tejas', status: 'Received' },
+  { id: 'o4', rowId: '3', itemName: 'Staples', itemNumber: 'STA1', quantityOrdered: 3, unitPrice: 4, estimatedTotal: 12, orderDate: '2026-03-01', vendor: 'Amazon', status: 'Cancelled' },
+  { id: 'o5', rowId: '2', itemName: 'Coffee', itemNumber: 'COF1', quantityOrdered: 2, unitPrice: 0, estimatedTotal: 0, orderDate: '2026-03-05', vendor: 'Tejas', status: 'Received' },
+];
+const costCategoryByRowId = new Map([
+  ['1', 'Office Supplies'],
+  ['2', 'Breakroom Supplies'],
+  ['3', 'Office Supplies'],
+]);
+
+// extendedTotalFor / isMissingPrice / monthKey
+assert.equal(extendedTotalFor({ estimatedTotal: 20 }), 20);
+assert.equal(extendedTotalFor({ estimatedTotal: NaN, quantityOrdered: 3, unitPrice: 4 }), 12, 'falls back to qty x price if estimatedTotal is not a number');
+assert.equal(isMissingPrice({ unitPrice: 0 }), true);
+assert.equal(isMissingPrice({ unitPrice: 2 }), false);
+assert.equal(monthKey('2026-03-05'), '2026-03');
+assert.equal(monthKey(null), null, 'missing date does not throw');
+
+// buildSpendRecords
+const records = buildSpendRecords(costOrders, costCategoryByRowId);
+assert.equal(records.length, 5, 'one record per placed order, cancelled order included');
+assert.equal(records[3].category, 'Office Supplies');
+assert.equal(records[4].missingPrice, true, '$0 unit price is flagged');
+assert.equal(records[0].missingPrice, false);
+const orphanRecord = buildSpendRecords([{ id: 'o6', rowId: '999', itemName: 'Ghost', quantityOrdered: 1, unitPrice: 5, estimatedTotal: 5, orderDate: '2026-01-01' }], costCategoryByRowId);
+assert.equal(orphanRecord[0].category, 'Uncategorized', 'item with no catalog match is Uncategorized, not dropped');
+
+// filterRecords
+assert.equal(filterRecords(records, {}).length, 5, 'no filters returns everything');
+assert.equal(filterRecords(records, { category: 'Office Supplies' }).length, 3);
+assert.equal(filterRecords(records, { rowId: '2' }).length, 2, 'coffee ordered twice');
+assert.equal(filterRecords(records, { from: '2026-02-01' }).length, 4, 'excludes the January order');
+assert.equal(filterRecords(records, { to: '2026-02-28' }).length, 3, 'excludes March orders');
+assert.equal(filterRecords(records, { from: '2026-02-01', to: '2026-02-28' }).length, 2, 'Feb-only window');
+
+// summarize
+const officeAndBreakroom = summarizeSpend(records);
+assert.equal(officeAndBreakroom.totalSpend, 92, '20+10+50+12+0');
+assert.equal(officeAndBreakroom.totalOrders, 5);
+assert.equal(officeAndBreakroom.flaggedCount, 1);
+assert.deepEqual(officeAndBreakroom.byCategory, { 'Office Supplies': 42, 'Breakroom Supplies': 50 });
+
+// summarizeItem (Coffee: two orders, 6 units total, $50 spend — the $0 order pulls the average down)
+const coffeeDetail = summarizeItem(filterRecords(records, { rowId: '2' }));
+assert.equal(coffeeDetail.totalSpent, 50);
+assert.equal(coffeeDetail.totalQuantity, 6);
+assert.equal(coffeeDetail.timesOrdered, 2);
+assert.equal(coffeeDetail.avgUnitPrice, 50 / 6);
+assert.equal(coffeeDetail.avgCostPerOrder, 25);
+assert.deepEqual(summarizeItem([]), { totalSpent: 0, totalQuantity: 0, timesOrdered: 0, avgUnitPrice: 0, avgCostPerOrder: 0 }, 'no orders yields zeros, not NaN/division errors');
+
+// buildMonthlySeries — chronological, one bucket per month
+const months = buildMonthlySeries(records);
+assert.deepEqual(months.map((m) => m.month), ['2026-01', '2026-02', '2026-03']);
+assert.equal(months[1].spend, 60, 'Feb: Pens $10 + Coffee $50');
+assert.equal(months[1].orders, 2);
+assert.equal(months[2].spend, 12, 'Mar: Staples $12 + Coffee $0');
+assert.equal(months[2].orders, 2);
+
+// buildCategoryTotals — sorted by spend descending
+const catTotals = buildCategoryTotals(records);
+assert.deepEqual(catTotals, [
+  { category: 'Breakroom Supplies', spend: 50 },
+  { category: 'Office Supplies', spend: 42 },
+]);
+
+// rankItemsBySpend — sorted by spend descending, per-item rollup
+const ranked = rankItemsBySpend(records);
+assert.equal(ranked.length, 3, 'Pens, Coffee, Staples');
+assert.equal(ranked[0].item, 'Coffee', 'Coffee ($50) outranks Pens ($30) and Staples ($12)');
+assert.equal(ranked[0].totalQuantity, 6);
+assert.equal(ranked[0].timesOrdered, 2);
+assert.equal(ranked[0].flaggedCount, 1);
+assert.equal(ranked[1].item, 'Pens');
+assert.equal(ranked[1].totalSpent, 30);
+assert.equal(ranked[1].timesOrdered, 2);
+assert.equal(ranked[2].item, 'Staples');
+assert.equal(ranked[2].flaggedCount, 0);
 
 console.log('All inventory-logic checks passed ✓');

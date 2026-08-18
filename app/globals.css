@@ -229,3 +229,69 @@ tbody select { padding: 6px 8px; }
 .order-form { flex-wrap: wrap; min-width: 420px; }
 .order-form input[type="text"] { width: 110px; }
 .order-form input[type="number"] { width: 64px; }
+
+/* ── Cost analysis dashboard ───────────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+.kpi-grid-compact { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-top: 4px; }
+.kpi-card {
+  --kpi-accent: var(--uhd-red);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  position: relative;
+  padding-left: 20px;
+}
+.kpi-card::before {
+  content: '';
+  position: absolute; left: 0; top: 12px; bottom: 12px; width: 4px;
+  border-radius: 3px;
+  background: var(--kpi-accent);
+}
+.kpi-card-compact { padding: 12px 14px 12px 18px; }
+.kpi-card-compact::before { top: 10px; bottom: 10px; }
+.kpi-label {
+  font-size: 11px; font-weight: 700; color: var(--muted-light);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px;
+}
+.kpi-value { font-size: 24px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+.kpi-card-compact .kpi-value { font-size: 18px; }
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.chart-title { margin: 0 0 14px; font-size: 14.5px; font-weight: 700; color: var(--ink); cursor: default; }
+
+.chart-bar { fill: var(--uhd-red); opacity: .85; transition: opacity .12s ease; }
+.chart-bar-group:hover .chart-bar { opacity: 1; }
+.chart-axis-label { font-size: 10px; fill: var(--muted-light); }
+.chart-line { stroke: #2f6feb; stroke-width: 2; }
+.chart-line-dot { fill: #2f6feb; }
+
+.cat-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 8px; vertical-align: middle;
+}
+
+.cat-compare { display: flex; flex-direction: column; gap: 14px; }
+.cat-compare-row { display: flex; align-items: center; gap: 12px; }
+.cat-compare-label { flex: 0 0 150px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.cat-compare-track {
+  flex: 1; height: 16px; background: var(--bg); border-radius: 999px; overflow: hidden;
+}
+.cat-compare-fill { height: 100%; border-radius: 999px; transition: width .3s ease; }
+.cat-compare-value { flex: 0 0 90px; text-align: right; font-size: 13px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .cat-compare-label { flex-basis: 110px; font-size: 12px; }
+  .cat-compare-value { flex-basis: 70px; font-size: 12px; }
+}
