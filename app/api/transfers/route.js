@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { transferStock } from '@/lib/localStore';
+import { logEvent } from '@/lib/smartsheetLog';
 import { STAFF, TRANSFER_DESTINATIONS } from '@/lib/config';
 
 export const dynamic = 'force-dynamic';
 
 // POST /api/transfers  body: { rowId, itemName, quantity, destination, person } → { ok: true, updated }
-// Moves stock from S755 to the destination breakroom in the local store and logs it. Never touches Smartsheet.
+// Moves stock from S755 to the destination breakroom in the local store and logs
+// it. Never touches the Smartsheet catalog. Best-effort mirrored to the separate
+// Smartsheet audit-log sheet (see lib/smartsheetLog.js) after the local write.
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -26,6 +29,17 @@ export async function POST(request) {
     }
 
     const updated = transferStock({ rowId, itemName, quantity, destination, person });
+
+    logEvent({
+      timestamp: new Date().toISOString(),
+      eventType: 'Transfer',
+      item: itemName,
+      quantity,
+      source: 'S755',
+      destination,
+      person,
+    });
+
     return NextResponse.json({ ok: true, updated });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 400 });

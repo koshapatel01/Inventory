@@ -21,8 +21,8 @@ by **Smartsheet's own alert rules** — see `UHD-Inventory-Architecture-and-Buil
    ```
    Set `SMARTSHEET_API_TOKEN` and `SMARTSHEET_SHEET_ID`.
 3. Match your columns: open `lib/config.js` and edit the `COLUMN_MAP` values so they
-   equal your Smartsheet column titles exactly (case-sensitive). Adjust `LOCATIONS`,
-   `CATEGORIES`, and `STATUS_OPTIONS` if yours differ.
+   equal your Smartsheet column titles exactly (case-sensitive). Adjust `LOCATIONS` and
+   `CATEGORIES` if yours differ. (Status is automatic — see below — not a config option.)
 4. Run locally:
    ```bash
    npm run dev

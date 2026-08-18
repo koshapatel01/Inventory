@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { extractPdfText } from '@/lib/pdfText';
-import { parseInvoiceText } from '@/lib/invoiceParser';
+import { parseInvoiceText, matchLineItemToCatalog } from '@/lib/invoiceParser';
 import { saveInvoiceFile } from '@/lib/invoiceStorage';
 import { saveInvoiceRecord } from '@/lib/localStore';
 import { getInventory } from '@/lib/smartsheet';
@@ -26,14 +26,13 @@ export async function POST(request) {
     // Match against the real catalog's Item Numbers rather than guessing a
     // generic code pattern — real SKUs vary too much (letters/digits mixed,
     // or even plain phrases) for one regex to reliably catch them all.
+    // Vendors that print no SKU at all (Amazon) fall back to a fuzzy name
+    // match instead — see matchLineItemToCatalog.
     const { items: catalogItems } = await getInventory();
-    const catalogBySkuUpper = new Map(
-      catalogItems.filter((item) => item.sku).map((item) => [item.sku.toUpperCase(), item])
-    );
     const parsed = parseInvoiceText(text, catalogItems.map((item) => item.sku).filter(Boolean));
 
     const lines = parsed.lineItems.map((line) => {
-      const match = catalogBySkuUpper.get(line.sku.toUpperCase());
+      const match = matchLineItemToCatalog(line, catalogItems);
       if (!match) return { ...line, matched: false };
       return {
         ...line,
@@ -62,7 +61,19 @@ export async function POST(request) {
     // raw text is often the fastest way to tell what went wrong.
     const rawTextPreview = text.slice(0, 6000);
 
-    return NextResponse.json({ ok: true, invoice, lines, rawTextPreview });
+    // Lightweight catalog so the review UI can offer a manual "pick the
+    // right item" fallback when auto-matching (by SKU or fuzzy name) misses
+    // — expected to happen sometimes for vendors like Amazon with no SKU.
+    const catalog = catalogItems.map((item) => ({
+      rowId: item.rowId,
+      sku: item.sku,
+      name: item.name,
+      minimum: item.minimum,
+      vendor: item.vendor,
+      orderLink: item.orderLink || null,
+    }));
+
+    return NextResponse.json({ ok: true, invoice, lines, rawTextPreview, catalog, invoiceTotal: parsed.invoiceTotal });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }

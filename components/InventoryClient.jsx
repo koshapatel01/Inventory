@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CATEGORIES, STATUS_OPTIONS, STAFF, TRANSFER_DESTINATIONS, VENDORS } from '@/lib/config';
-import { filterItems, isLowStock, totalQuantity, summarize } from '@/lib/inventory';
+import { CATEGORIES, STAFF, TRANSFER_DESTINATIONS, VENDORS } from '@/lib/config';
+import { filterItems, isLowStock, totalQuantity, summarize, deriveItemStatus } from '@/lib/inventory';
 
 const LOCATION_QTY_FIELDS = [
   { field: 'qtyS755', label: 'Qty S755' },
@@ -110,6 +110,9 @@ export default function InventoryClient({ initialItems }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Order failed');
+      setItems((prev) =>
+        prev.map((it) => (it.rowId === item.rowId ? { ...it, hasPendingOrder: true } : it))
+      );
       setMessage({ type: 'ok', text: `Order placed for ${quantity} × ${item.name} from ${vendor}.` });
       setOrderRow(null);
     } catch (err) {
@@ -205,17 +208,7 @@ export default function InventoryClient({ initialItems }) {
                   <td className="num">{totalQuantity(item)}</td>
                   <td className="num">{item.minimum}</td>
                   <td>
-                    <select
-                      value={item.status ?? ''}
-                      disabled={busy}
-                      onChange={(e) => saveField(item, 'status', e.target.value)}
-                    >
-                      <option value="">—</option>
-                      {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                      {item.status && !STATUS_OPTIONS.includes(item.status) && (
-                        <option value={item.status}>{item.status}</option>
-                      )}
-                    </select>
+                    <StatusBadge status={deriveItemStatus(item, item.hasPendingOrder)} />
                   </td>
                   <td className="notes">{item.notes}</td>
                   <td>
@@ -267,12 +260,20 @@ export default function InventoryClient({ initialItems }) {
       </div>
 
       <p className="footnote">
-        Quantities, status, and transfers are stored locally on this machine — Smartsheet
-        stays a read-only catalog and is never written to. Low-stock rows are highlighted; the
-        daily email to ITPMO@UHD.EDU is handled by Smartsheet’s alert rules.
+        Quantities and transfers are stored locally on this machine — Smartsheet stays a
+        read-only catalog and is never written to. Status is automatic: Ordered while a
+        placed order hasn’t fully arrived, otherwise OK/Low from current stock vs minimum.
+        Low-stock rows are highlighted; the daily email to ITPMO@UHD.EDU is handled by
+        Smartsheet’s alert rules.
       </p>
     </section>
   );
+}
+
+const STATUS_BADGE_CLASS = { OK: 'status-ok', Low: 'status-low', Ordered: 'status-ordered' };
+
+function StatusBadge({ status }) {
+  return <span className={`status-badge ${STATUS_BADGE_CLASS[status] || ''}`}>{status}</span>;
 }
 
 function TransferForm({ item, busy, onCancel, onSubmit }) {

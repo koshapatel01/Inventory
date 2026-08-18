@@ -1,18 +1,32 @@
 import Link from 'next/link';
 import { getInventory } from '@/lib/smartsheet';
-import { mergeAndSync } from '@/lib/localStore';
+import { mergeAndSync, getOrders } from '@/lib/localStore';
 import InventoryClient from '@/components/InventoryClient';
 
 // Always fetch fresh data from Smartsheet on each request, then merge in
 // local-only quantities/status (syncing in any brand-new items).
 export const dynamic = 'force-dynamic';
 
+// An item's displayed Status is never set manually — it's "Ordered" while it
+// has an order placed but not yet fully received, otherwise OK/Low from
+// current stock vs minimum (see lib/inventory.js's deriveItemStatus).
+const PENDING_ORDER_STATUSES = new Set(['Ordered', 'Partially Received']);
+
 export default async function Page() {
   let items = [];
   let error = null;
   try {
     const { items: sheetItems } = await getInventory();
-    items = mergeAndSync(sheetItems);
+    const merged = mergeAndSync(sheetItems);
+    const pendingRowIds = new Set(
+      getOrders()
+        .filter((o) => PENDING_ORDER_STATUSES.has(o.status))
+        .map((o) => o.rowId)
+    );
+    items = merged.map((item) => ({
+      ...item,
+      hasPendingOrder: pendingRowIds.has(String(item.rowId)),
+    }));
   } catch (err) {
     error = err.message;
   }

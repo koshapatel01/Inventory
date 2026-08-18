@@ -10,11 +10,12 @@ import {
   canTransfer,
   computeEstimatedTotal,
   deriveOrderStatus,
+  deriveItemStatus,
   filterItems,
   fieldsToCells,
   summarize,
 } from '../lib/inventory.js';
-import { parseInvoiceText } from '../lib/invoiceParser.js';
+import { parseInvoiceText, matchLineItemToCatalog } from '../lib/invoiceParser.js';
 
 const COLUMN_MAP = {
   sku: 'SKU', name: 'Item Name', category: 'Category',
@@ -86,6 +87,12 @@ assert.equal(deriveOrderStatus(50, 0), 'Ordered');
 assert.equal(deriveOrderStatus(50, 20), 'Partially Received');
 assert.equal(deriveOrderStatus(50, 50), 'Received');
 assert.equal(deriveOrderStatus(50, 60), 'Received', 'over-received still counts as fully received');
+
+// deriveItemStatus
+assert.equal(deriveItemStatus(items[0], false), 'Low', 'low stock, no pending order');
+assert.equal(deriveItemStatus(items[1], false), 'OK', 'sufficient stock, no pending order');
+assert.equal(deriveItemStatus(items[1], true), 'Ordered', 'pending order overrides OK');
+assert.equal(deriveItemStatus(items[0], true), 'Ordered', 'pending order overrides Low too');
 
 // filterItems
 assert.equal(filterItems(items, { category: 'Office' }).length, 1);
@@ -326,5 +333,196 @@ assert.equal(tejasTea.sku, 'BTC10348');
 assert.equal(tejasTea.quantity, 1, 'the trailing Payments/Sub-Total block (no colons) must not bleed into the last item');
 assert.equal(tejasTea.unitPrice, 8.50);
 assert.equal(tejasTea.extendedPrice, 8.50);
+
+// Real Amazon "Final Details for Order" text (pasted by the user from the
+// app's troubleshooting panel). Unlike Gateway/Tejas, there is NO SKU
+// anywhere in the text at all — only "N of: <product title>" and a single
+// unit price per line, no separate extended total.
+const amazonFixture = `
+Final Details for Order #114-2841024-9625015
+Order Placed: July 9, 2026
+Amazon.com order number: 114-2841024-9625015
+Order Total: $37.90
+Shipped on July 10, 2026
+Items Ordered Price
+2 of: OXO Good Grips POP Container - Airtight Food Storage - Big Square Short 2.8 Qt Ideal for 5 lbs of sugar, cookies or crac
+kers
+Sold by and invoiced on behalf of: Amazon (seller profile)
+Business Price
+Condition: New
+$18.95
+Shipping Address:
+Nancy Butler
+1st Street
+UHD Mailroom Suite N101
+Houston, TX 77002
+United States
+Shipping Speed:
+FREE Prime Delivery
+Item(s) Subtotal: $37.90
+Shipping & Handling: $0.00
+-----
+Total before tax: $37.90
+Sales Tax: $0.00
+-----
+Total for This Shipment: $37.90
+-----
+Payment information
+Payment Method:
+MasterCard | Last digits: 6282
+Billing address
+Kimberley Solomon
+1 MAIN ST
+HOUSTON, TX 77002-1014
+United States
+Item(s) Subtotal: $37.90
+Shipping & Handling: $0.00
+-----
+Total before tax: $37.90
+Estimated Tax: $0.00
+-----
+Grand Total: $37.90
+Credit Card transactions
+MasterCard ending in 6282: July 10, 2026: $37.90
+To view the status of your order, return to Order Summary .
+Conditions of Use | Privacy Notice © 1996-2020, Amazon.com, Inc.
+`;
+const amazonParse = parseInvoiceText(amazonFixture);
+assert.equal(amazonParse.vendor, 'Amazon');
+assert.equal(amazonParse.referenceNumber, '114-2841024-9625015', 'falls back to the Amazon order number label');
+assert.equal(amazonParse.orderDate, 'July 9, 2026', 'falls back to "Order Placed" label');
+assert.equal(amazonParse.lineItems.length, 1, 'should find the one line item with no SKU at all');
+
+const [oxo] = amazonParse.lineItems;
+assert.equal(oxo.sku, null, 'Amazon prints no SKU — matching must fall back to name');
+assert.equal(oxo.quantity, 2);
+assert.equal(oxo.unitPrice, 18.95);
+assert.equal(oxo.extendedPrice, 37.90, 'qty x unit price, since Amazon never prints a per-line extended total');
+assert.ok(
+  oxo.description.startsWith('OXO Good Grips POP Container'),
+  'description should be the product title, not the Sold by/Condition boilerplate'
+);
+assert.ok(!/Sold by|Condition/.test(oxo.description), 'boilerplate after the title should be stripped');
+
+// Real bug report: the same Tejas invoice as above, but with its first item
+// (AJMCP9AJCWWH1CT) NOT in the catalog yet. Tejas's column header row reads
+// "...Unit Price Unit Total" — the word "Total" in that header was wrongly
+// read as the start of the totals/payments block, cutting the generic-SKU
+// fallback's search window off before a single item row was reached, so the
+// uncataloged first item vanished (and only it — the other 3 rows, already
+// matched by known SKU, showed up fine) with the parsed total short by
+// exactly its $54.24 price.
+const tejasKnownSkusMissingFirst = ['MEA06074', 'GJO21040', 'BTC10348']; // AJMCP9AJCWWH1CT deliberately excluded
+const tejasPartialParse = parseInvoiceText(tejasFixture, tejasKnownSkusMissingFirst);
+assert.equal(
+  tejasPartialParse.lineItems.length,
+  4,
+  'all 4 Tejas rows should be parsed even though the first SKU is not in the catalog'
+);
+assert.equal(tejasPartialParse.lineItems[0].sku, 'AJMCP9AJCWWH1CT', 'uncataloged first item should still surface via the generic fallback');
+assert.equal(tejasPartialParse.lineItems[0].quantity, 1);
+assert.equal(tejasPartialParse.lineItems[0].unitPrice, 54.24);
+assert.equal(tejasPartialParse.lineItems[0].extendedPrice, 54.24);
+const tejasPartialSum = tejasPartialParse.lineItems.reduce((s, l) => s + l.extendedPrice, 0);
+assert.ok(Math.abs(tejasPartialSum - 196.89) < 0.001, `Tejas parsed line items should sum to the invoice total (got ${tejasPartialSum})`);
+
+// Real Gateway invoice text (pasted by the user) where several line items'
+// SKUs aren't in the Smartsheet catalog yet (Post-it notes, a wastebasket, a
+// promo cracker box) — before the generic-SKU fallback, these vanished
+// entirely instead of surfacing as "no catalog match" rows, so the parsed
+// total silently came up short of the invoice's real total with no
+// indication why.
+const partiallyCatalogedFixture = `
+# SKU Description And Comments Qty Unit Price Extended
+1
+MMM62218SSMIACP
+Post-it&reg Super Sticky Notes - Supernova Neons Color Collection - 2" Flag/Note Width x 2" Flag/Note Length - Square - 90 Sheets per Pad - Aqua Splash, Acid Lime, Guava, Iris Infusion - Paper - Super Sticky, Adhesive, Recyclable, Residue-free - 1620 / Pac
+1
+Pack
+$17.27
+$17.27
+2
+FOL06430
+Folgers&reg Fraction Pack Classic Roast Coffee - Regular - Medium - 1.5 oz Per Bag - Fraction Pack - 42 / Carton
+3
+Carton
+$45.27
+$135.81
+3
+OFD566143
+Highmark&#8482 Rectangular Plastic Wastebasket - 6.5 Gallons - 15"H x 10"W x 14-1/4"D - Black - Open Top - 6.50 gal Capacity - Rectangular - 15" Height x 10" Width x 14.2" Depth - Plastic - Black - 1 Each
+1
+Each
+$8.26
+$8.26
+4
+NES31831CT
+Coffee mate Hazelnut Liquid Concentrate Coffee Creamer - Pump Bottle - Hazelnut Flavor - 50.70 fl oz (1.50 L) - 600 Serving - 2 / Carton
+1
+Carton
+$60.85
+$60.85
+5
+NES55882
+Coffee mate Original Powdered Coffee Creamer Canister - Original Flavor - 0.69 lb (11 oz) - 155 Serving - 1 Each
+1
+Each
+$6.81
+$6.81
+6
+KEB31533
+CRACKER,CHEDDR,WHT,CHEEZIT
+1
+Box
+FREE
+FREE
+Promotion Used: 300
+Items: $229.00
+`;
+const gatewayKnownSkus = ['FOL06430', 'NES31831CT', 'NES55882']; // only these 3 are in the catalog
+const partialParse = parseInvoiceText(partiallyCatalogedFixture, gatewayKnownSkus);
+assert.equal(
+  partialParse.lineItems.length,
+  6,
+  'all 6 rows should be parsed, not just the 3 already in the catalog — uncataloged SKUs must surface, not vanish'
+);
+assert.deepEqual(
+  partialParse.lineItems.map((l) => l.sku),
+  ['MMM62218SSMIACP', 'FOL06430', 'OFD566143', 'NES31831CT', 'NES55882', 'KEB31533']
+);
+const parsedSum = partialParse.lineItems.reduce((s, l) => s + l.extendedPrice, 0);
+assert.ok(Math.abs(parsedSum - 229.0) < 0.001, `parsed line items should sum to the invoice total (got ${parsedSum})`);
+assert.equal(partialParse.invoiceTotal, 229.0, 'should extract the "Items: $229.00" total for reconciliation');
+
+// The generic-fallback SKUs correctly report no catalog match (they're not
+// in fakeCatalogGateway below) rather than crashing or false-matching.
+const fakeCatalogGateway = [
+  { rowId: 10, sku: 'FOL06430', name: 'Folgers Coffee', minimum: 2, vendor: 'Gateway' },
+  { rowId: 11, sku: 'NES31831CT', name: 'Hazelnut Liquid Pumps', minimum: 1, vendor: 'Gateway' },
+  { rowId: 12, sku: 'NES55882', name: 'Original Creamer Powder', minimum: 1, vendor: 'Gateway' },
+];
+const postIt = partialParse.lineItems.find((l) => l.sku === 'MMM62218SSMIACP');
+assert.equal(matchLineItemToCatalog(postIt, fakeCatalogGateway), null, 'uncataloged item should report no match, not a wrong guess');
+const coffee2 = partialParse.lineItems.find((l) => l.sku === 'FOL06430');
+assert.equal(matchLineItemToCatalog(coffee2, fakeCatalogGateway)?.rowId, 10, 'cataloged item should still match exactly as before');
+
+// extractInvoiceTotal via parseInvoiceText: Tejas has no "Items:" line, so it
+// should fall back to "Sub-Total" (no $ sign, matches PLAIN_PRICE_LINE style).
+assert.equal(tejasParse.invoiceTotal, 196.89, 'should extract the Tejas "Sub-Total 196.89" for reconciliation');
+
+// matchLineItemToCatalog: SKU lines match exactly as before; no-SKU lines
+// (Amazon) fall back to a fuzzy name match against the catalog.
+const fakeCatalog = [
+  { rowId: 1, sku: 'OXO-POP', name: 'OXO POP Container', minimum: 2, vendor: 'Amazon' },
+  { rowId: 2, sku: 'TWG09180', name: 'Lemon & Ginger Tea', minimum: 5, vendor: 'Gateway' },
+];
+assert.equal(
+  matchLineItemToCatalog(oxo, fakeCatalog)?.rowId,
+  1,
+  'fuzzy word-overlap match should find the OXO container even though "OXO POP Container" never appears ' +
+    'as one contiguous phrase in the padded marketing title'
+);
+assert.equal(matchLineItemToCatalog({ sku: 'TWG09180', description: '' }, fakeCatalog)?.rowId, 2, 'exact SKU match still takes priority');
+assert.equal(matchLineItemToCatalog({ sku: null, description: 'totally unrelated text' }, fakeCatalog), null, 'no match found is null, not a crash');
 
 console.log('All inventory-logic checks passed ✓');
