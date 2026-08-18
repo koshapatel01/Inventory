@@ -7,6 +7,10 @@ const nextConfig = {
   // bundle either.
   experimental: {
     serverComponentsExternalPackages: ['pdfjs-dist', '@napi-rs/canvas'],
+    // Runs instrumentation.js's register() at server boot, before any route
+    // module loads — required for the DOMMatrix polyfill to install early
+    // enough (Next 15+ enables this by default; still opt-in on 14.x).
+    instrumentationHook: true,
   },
 };
 
