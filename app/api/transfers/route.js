@@ -5,7 +5,7 @@ import { STAFF, TRANSFER_DESTINATIONS } from '@/lib/config';
 
 export const dynamic = 'force-dynamic';
 
-// POST /api/transfers  body: { rowId, itemName, quantity, destination, person } → { ok: true, updated }
+// POST /api/transfers  body: { rowId, itemName, itemNumber, quantity, destination, person } → { ok: true, updated }
 // Moves stock from S755 to the destination breakroom in the local store and logs
 // it. Never touches the Smartsheet catalog. Best-effort mirrored to the separate
 // Smartsheet audit-log sheet (see lib/smartsheetLog.js) after the local write —
@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { rowId, itemName, destination, person } = body;
+    const { rowId, itemName, itemNumber, destination, person } = body;
     const quantity = Number(body.quantity);
 
     if (!rowId || !itemName) {
@@ -32,12 +32,13 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid person.' }, { status: 400 });
     }
 
-    const updated = await transferStock({ rowId, itemName, quantity, destination, person });
+    const updated = await transferStock({ rowId, itemName, itemNumber, quantity, destination, person });
 
     await logEvent({
       timestamp: new Date().toISOString(),
       eventType: 'Transfer',
       item: itemName,
+      itemNumber,
       quantity,
       source: 'S755',
       destination,

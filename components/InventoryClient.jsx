@@ -73,7 +73,14 @@ export default function InventoryClient({ initialItems }) {
       const res = await fetch('/api/transfers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rowId: item.rowId, itemName: item.name, quantity, destination, person }),
+        body: JSON.stringify({
+          rowId: item.rowId,
+          itemName: item.name,
+          itemNumber: item.sku,
+          quantity,
+          destination,
+          person,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Transfer failed');

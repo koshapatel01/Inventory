@@ -33,12 +33,17 @@ const statements = [
     date TEXT NOT NULL,
     row_id TEXT NOT NULL,
     item TEXT,
+    item_number TEXT,
     quantity NUMERIC NOT NULL,
     source TEXT,
     destination TEXT,
     person TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
+  // Table already existed in production before item_number was added, so
+  // CREATE TABLE IF NOT EXISTS above is a no-op there — this ALTER is what
+  // actually adds the column to a database created before this change.
+  `ALTER TABLE transfers ADD COLUMN IF NOT EXISTS item_number TEXT`,
   `CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
     row_id TEXT NOT NULL,
