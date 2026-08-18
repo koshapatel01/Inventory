@@ -134,14 +134,15 @@ thead th {
   text-transform: uppercase; letter-spacing: .05em;
   position: sticky; top: 0;
   z-index: 1;
+  white-space: nowrap;
 }
-tbody td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tbody td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr { transition: background-color .1s ease; }
 tbody tr:hover { background: #fafbfc; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--muted); }
-.notes { color: var(--muted); max-width: 220px; }
+.notes { color: var(--muted); max-width: 220px; white-space: normal; }
 
 .row-low { background: var(--low-bg); box-shadow: inset 3px 0 0 var(--uhd-red); }
 .row-low:hover { background: #fdeae8; }
