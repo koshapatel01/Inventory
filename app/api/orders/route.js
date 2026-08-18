@@ -15,7 +15,11 @@ export async function GET(request) {
 // POST /api/orders  body: { rowId, itemName, itemNumber, quantity, orderedBy, vendor, link?, unitPrice, notes? }
 // Creates an order-history record. Never touches the Smartsheet catalog or item
 // stock — stock only changes on receipt. Best-effort mirrored to the separate
-// Smartsheet audit-log sheet (see lib/smartsheetLog.js) after the local write.
+// Smartsheet audit-log sheet (see lib/smartsheetLog.js) after the local write —
+// awaited (not fire-and-forget) because Vercel can freeze a serverless
+// function the instant its response is sent, which can kill an in-flight,
+// un-awaited request before it completes. logEvent() never throws, so
+// awaiting it adds a little latency but can't block or fail this operation.
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -44,7 +48,7 @@ export async function POST(request) {
       vendor: String(vendor).trim(), link, unitPrice, notes,
     });
 
-    logEvent({
+    await logEvent({
       timestamp: new Date().toISOString(),
       eventType: 'Order Placed',
       item: order.itemName,

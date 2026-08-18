@@ -7,7 +7,11 @@ export const dynamic = 'force-dynamic';
 // POST /api/orders/:orderId/receive  body: { quantity, date?, notes? } → { ok: true, order, item }
 // Logs a delivery against an order, bumps S755 stock, and records the transaction.
 // Never touches the Smartsheet catalog. Best-effort mirrored to the separate
-// Smartsheet audit-log sheet (see lib/smartsheetLog.js) after the local write.
+// Smartsheet audit-log sheet (see lib/smartsheetLog.js) after the local write —
+// awaited (not fire-and-forget) because Vercel can freeze a serverless
+// function the instant its response is sent, which can kill an in-flight,
+// un-awaited request before it completes. logEvent() never throws, so
+// awaiting it adds a little latency but can't block or fail this operation.
 export async function POST(request, { params }) {
   try {
     const body = await request.json();
@@ -24,7 +28,7 @@ export async function POST(request, { params }) {
       notes: body.notes,
     });
 
-    logEvent({
+    await logEvent({
       timestamp: new Date().toISOString(),
       eventType: 'Order Received',
       item: result.order.itemName,
