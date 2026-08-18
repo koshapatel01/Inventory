@@ -52,7 +52,7 @@ assert.equal(rawItems[0].sku, 'UHDITFO10');
 assert.equal(rawItems[0].rowId, 1);
 assert.equal(rawItems[1].name, 'Pens');
 
-// Simulate the local merge: Coffee is low (total 2 <= min 5), Pens is not (40 > 10).
+// Simulate the local merge: Coffee is low (total 2 < min 5), Pens is not (40 > 10).
 const items = [
   { ...rawItems[0], qtyS755: 2, qtyS821: 0, qtyTls: 0, status: 'Low' },
   { ...rawItems[1], qtyS755: 30, qtyS821: 10, qtyTls: 0, status: 'OK' },
@@ -66,7 +66,8 @@ assert.equal(totalQuantity({ qtyS755: 1, qtyTls: 'x' }), 1, 'non-numeric fields 
 // isLowStock
 assert.equal(isLowStock(items[0]), true, '2 <= 5 is low');
 assert.equal(isLowStock(items[1]), false, '40 <= 10 is not low');
-assert.equal(isLowStock({ qtyS755: 5, minimum: 5 }), true, 'boundary is low');
+assert.equal(isLowStock({ qtyS755: 5, minimum: 5 }), false, 'exactly at minimum is OK, not low');
+assert.equal(isLowStock({ qtyS755: 4, minimum: 5 }), true, 'just below minimum is low');
 assert.equal(isLowStock({ qtyS755: 5, minimum: '' }), false, 'missing minimum is unknown, not low');
 
 // canTransfer
