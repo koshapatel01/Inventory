@@ -18,7 +18,7 @@ export async function PATCH(request, { params }) {
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: 'No editable fields provided.' }, { status: 400 });
     }
-    updateLocalItem(params.rowId, patch);
+    await updateLocalItem(params.rowId, patch);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });

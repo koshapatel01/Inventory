@@ -28,7 +28,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid person.' }, { status: 400 });
     }
 
-    const updated = transferStock({ rowId, itemName, quantity, destination, person });
+    const updated = await transferStock({ rowId, itemName, quantity, destination, person });
 
     logEvent({
       timestamp: new Date().toISOString(),

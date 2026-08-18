@@ -14,8 +14,8 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const { items: catalogItems } = await getInventory();
-    const existingCatalog = [...catalogItems, ...getManualCatalogItems()];
-    const item = addManualItem(
+    const existingCatalog = [...catalogItems, ...(await getManualCatalogItems())];
+    const item = await addManualItem(
       { sku: body.sku, name: body.name, vendor: body.vendor },
       existingCatalog
     );

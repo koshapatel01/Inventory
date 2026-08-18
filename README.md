@@ -9,6 +9,10 @@ by **Smartsheet's own alert rules** — see `UHD-Inventory-Architecture-and-Buil
 - Node.js 18+ and npm
 - A Smartsheet API access token — Smartsheet → account icon → Personal Settings → API Access
 - Your inventory Sheet ID — Smartsheet → File → Properties → Sheet ID
+- A Postgres database (e.g. via Vercel's Storage tab → Create Database) — the catalog
+  itself stays in Smartsheet, but everything else this app tracks (quantities, orders,
+  transfers, receiving log, uploaded invoices, manually-added items) lives in Postgres,
+  not on local disk, since a normal file write doesn't survive on Vercel.
 
 ## Setup
 1. Install dependencies:
@@ -19,11 +23,16 @@ by **Smartsheet's own alert rules** — see `UHD-Inventory-Architecture-and-Buil
    ```bash
    cp .env.example .env.local
    ```
-   Set `SMARTSHEET_API_TOKEN` and `SMARTSHEET_SHEET_ID`.
-3. Match your columns: open `lib/config.js` and edit the `COLUMN_MAP` values so they
+   Set `DATABASE_URL`, `SMARTSHEET_API_TOKEN`, and `SMARTSHEET_SHEET_ID`.
+3. Set up the database schema, then (optional) bring in any existing local data:
+   ```bash
+   npm run db:migrate
+   npm run db:import
+   ```
+4. Match your columns: open `lib/config.js` and edit the `COLUMN_MAP` values so they
    equal your Smartsheet column titles exactly (case-sensitive). Adjust `LOCATIONS` and
    `CATEGORIES` if yours differ. (Status is automatic — see below — not a config option.)
-4. Run locally:
+5. Run locally:
    ```bash
    npm run dev
    ```
@@ -37,9 +46,11 @@ npm run verify
 ## Deploy (GitHub → Vercel)
 1. Push this folder to a new GitHub repository.
 2. In Vercel: **Add New → Project → Import** the repo.
-3. Add the two Environment Variables (`SMARTSHEET_API_TOKEN`, `SMARTSHEET_SHEET_ID`)
+3. In the project's **Storage** tab, create a Postgres database and connect it — this
+   auto-populates `DATABASE_URL` in the project's environment variables.
+4. Add the remaining Environment Variables (`SMARTSHEET_API_TOKEN`, `SMARTSHEET_SHEET_ID`)
    in the Vercel project settings.
-4. **Deploy.** Vercel gives you a live URL; every push to GitHub redeploys automatically.
+5. **Deploy.** Vercel gives you a live URL; every push to GitHub redeploys automatically.
 
 ## Project layout
 ```

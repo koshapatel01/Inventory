@@ -4,8 +4,8 @@ import { getTransactions } from '@/lib/localStore';
 // Local-only receiving log (deliveries logged against orders) — never touches Smartsheet.
 export const dynamic = 'force-dynamic';
 
-export default function ReceivingLogPage() {
-  const transactions = getTransactions();
+export default async function ReceivingLogPage() {
+  const transactions = await getTransactions();
 
   return (
     <main className="container">

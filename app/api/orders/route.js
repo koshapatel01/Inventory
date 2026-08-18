@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/orders?rowId=  → { orders }
 export async function GET(request) {
   const rowId = request.nextUrl.searchParams.get('rowId');
-  const orders = getOrders(rowId ? { rowId } : {});
+  const orders = await getOrders(rowId ? { rowId } : {});
   return NextResponse.json({ orders });
 }
 
@@ -39,7 +39,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unit price must be a non-negative number.' }, { status: 400 });
     }
 
-    const order = placeOrder({
+    const order = await placeOrder({
       rowId, itemName, itemNumber, quantity, orderedBy,
       vendor: String(vendor).trim(), link, unitPrice, notes,
     });

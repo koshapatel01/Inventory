@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/invoices/:fileId — streams the stored invoice/PO PDF back.
 export async function GET(request, { params }) {
   try {
-    const bytes = readInvoiceFile(params.fileId);
+    const bytes = await readInvoiceFile(params.fileId);
     return new NextResponse(bytes, {
       headers: {
         'Content-Type': 'application/pdf',

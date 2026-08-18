@@ -4,8 +4,8 @@ import { getTransfers } from '@/lib/localStore';
 // Local-only transfer log — never touches Smartsheet.
 export const dynamic = 'force-dynamic';
 
-export default function TransfersPage() {
-  const transfers = getTransfers();
+export default async function TransfersPage() {
+  const transfers = await getTransfers();
 
   return (
     <main className="container">

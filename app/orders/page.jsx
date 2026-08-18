@@ -5,9 +5,9 @@ import OrdersClient from '@/components/OrdersClient';
 // Local-only order history — never touches Smartsheet.
 export const dynamic = 'force-dynamic';
 
-export default function OrdersPage({ searchParams }) {
+export default async function OrdersPage({ searchParams }) {
   const rowId = searchParams?.rowId;
-  const orders = getOrders(rowId ? { rowId } : {});
+  const orders = await getOrders(rowId ? { rowId } : {});
   const itemName = rowId && orders[0] ? orders[0].itemName : null;
 
   return (

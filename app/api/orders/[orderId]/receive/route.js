@@ -17,7 +17,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Quantity must be a positive number.' }, { status: 400 });
     }
 
-    const result = receiveOrder({
+    const result = await receiveOrder({
       orderId: params.orderId,
       quantity,
       date: body.date,

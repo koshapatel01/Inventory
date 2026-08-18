@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { extractPdfText } from '@/lib/pdfText';
 import { parseInvoiceText, matchLineItemToCatalog } from '@/lib/invoiceParser';
 import { saveInvoiceFile } from '@/lib/invoiceStorage';
-import { saveInvoiceRecord } from '@/lib/localStore';
+import { saveInvoiceRecord, getManualCatalogItems } from '@/lib/localStore';
 import { getInventory } from '@/lib/smartsheet';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,8 @@ export async function POST(request) {
     // or even plain phrases) for one regex to reliably catch them all.
     // Vendors that print no SKU at all (Amazon) fall back to a fuzzy name
     // match instead — see matchLineItemToCatalog.
-    const { items: catalogItems } = await getInventory();
+    const { items: sheetItems } = await getInventory();
+    const catalogItems = [...sheetItems, ...(await getManualCatalogItems())];
     const parsed = parseInvoiceText(text, catalogItems.map((item) => item.sku).filter(Boolean));
 
     const lines = parsed.lineItems.map((line) => {
@@ -46,8 +47,8 @@ export async function POST(request) {
       };
     });
 
-    const { fileId } = saveInvoiceFile(buffer, file.name || 'invoice.pdf');
-    const invoice = saveInvoiceRecord({
+    const { fileId } = await saveInvoiceFile(buffer, file.name || 'invoice.pdf');
+    const invoice = await saveInvoiceRecord({
       fileId,
       originalFilename: file.name || 'invoice.pdf',
       vendor: parsed.vendor,

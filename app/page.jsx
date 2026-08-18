@@ -17,9 +17,10 @@ export default async function Page() {
   let error = null;
   try {
     const { items: sheetItems } = await getInventory();
-    const merged = mergeAndSync(sheetItems);
+    const merged = await mergeAndSync(sheetItems);
+    const orders = await getOrders();
     const pendingRowIds = new Set(
-      getOrders()
+      orders
         .filter((o) => PENDING_ORDER_STATUSES.has(o.status))
         .map((o) => o.rowId)
     );

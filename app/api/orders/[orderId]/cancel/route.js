@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 // Smartsheet audit-log sheet (see lib/smartsheetLog.js) after the local write.
 export async function POST(request, { params }) {
   try {
-    const order = cancelOrder({ orderId: params.orderId });
+    const order = await cancelOrder({ orderId: params.orderId });
 
     logEvent({
       timestamp: new Date().toISOString(),
