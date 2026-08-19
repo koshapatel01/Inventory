@@ -180,7 +180,7 @@ export default function InvoiceUpload() {
 
   return (
     <section>
-      <form className="filters" onSubmit={upload}>
+      <form className="filters" data-tour="upload-form" onSubmit={upload}>
         <label className="grow">
           Invoice / PO PDF
           <input
@@ -220,7 +220,7 @@ export default function InvoiceUpload() {
             </div>
           )}
 
-          <div className="filters">
+          <div className="filters" data-tour="ordered-by">
             <label>
               Ordered By (applies to all lines)
               <select value={orderedBy} onChange={(e) => setOrderedBy(e.target.value)}>

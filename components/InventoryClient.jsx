@@ -180,8 +180,8 @@ export default function InventoryClient({ initialItems }) {
               <th className="num">Min</th>
               <th>Status</th>
               <th>Notes</th>
-              <th>Transfer</th>
-              <th>Orders</th>
+              <th data-tour="transfer-header">Transfer</th>
+              <th data-tour="orders-header">Orders</th>
             </tr>
           </thead>
           <tbody>

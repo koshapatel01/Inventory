@@ -59,7 +59,7 @@ export default function CostAnalysisClient({ initialRecords, items, categories }
 
   return (
     <section>
-      <div className="filters">
+      <div className="filters" data-tour="cost-filters">
         <label>
           From
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -94,7 +94,7 @@ export default function CostAnalysisClient({ initialRecords, items, categories }
         <div className="empty">No orders have been placed yet — cost analysis will appear once orders exist.</div>
       ) : (
         <>
-          <div className="kpi-grid">
+          <div className="kpi-grid" data-tour="kpi-main">
             <KpiCard
               label="Total Supply Spending"
               value={formatCurrency(summary.totalSpend)}
@@ -153,7 +153,7 @@ export default function CostAnalysisClient({ initialRecords, items, categories }
             </div>
           )}
 
-          <div className="chart-card" style={{ marginTop: 18 }}>
+          <div className="chart-card" data-tour="monthly-chart" style={{ marginTop: 18 }}>
             <h3 className="chart-title" title="Spending and order count for each month, based on the order date, within the current filters.">
               Monthly Spending &amp; Order Count
             </h3>
@@ -164,7 +164,7 @@ export default function CostAnalysisClient({ initialRecords, items, categories }
             )}
           </div>
 
-          <div className="chart-card" style={{ marginTop: 18 }}>
+          <div className="chart-card" data-tour="category-compare" style={{ marginTop: 18 }}>
             <h3
               className="chart-title"
               title="Office Supplies vs Breakroom Supplies spend for the current date range and item filter."
@@ -174,7 +174,7 @@ export default function CostAnalysisClient({ initialRecords, items, categories }
             <CategoryComparison office={officeTotal} breakroom={breakroomTotal} />
           </div>
 
-          <div className="table-wrap" style={{ marginTop: 18 }}>
+          <div className="table-wrap" data-tour="ranked-table" style={{ marginTop: 18 }}>
             <table>
               <thead>
                 <tr>

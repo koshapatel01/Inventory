@@ -1,4 +1,5 @@
 import './globals.css';
+import GuideProvider from '@/components/Guide';
 
 export const metadata = {
   title: 'UHD IT PMO — Supply Inventory',
@@ -8,7 +9,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <GuideProvider>{children}</GuideProvider>
+      </body>
     </html>
   );
 }
