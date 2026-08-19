@@ -10,7 +10,8 @@
     "lint": "next lint",
     "verify": "node scripts/verify.mjs",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
-    "db:import": "node --env-file-if-exists=.env.local scripts/import-local-data.mjs"
+    "db:import": "node --env-file-if-exists=.env.local scripts/import-local-data.mjs",
+    "db:reset-demo": "node --env-file-if-exists=.env.local scripts/reset-demo-data.mjs"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.7",

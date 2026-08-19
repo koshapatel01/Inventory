@@ -18,13 +18,17 @@ export default async function Page() {
   try {
     const { items: sheetItems } = await getInventory();
     const merged = await mergeAndSync(sheetItems);
+    // Rows with no SKU have nothing to order/track by and aren't real,
+    // orderable catalog items (e.g. blank placeholder rows in the
+    // Smartsheet) — filtered from view rather than shown as unusable rows.
+    const withSku = merged.filter((item) => item.sku);
     const orders = await getOrders();
     const pendingRowIds = new Set(
       orders
         .filter((o) => PENDING_ORDER_STATUSES.has(o.status))
         .map((o) => o.rowId)
     );
-    items = merged.map((item) => ({
+    items = withSku.map((item) => ({
       ...item,
       hasPendingOrder: pendingRowIds.has(String(item.rowId)),
     }));
