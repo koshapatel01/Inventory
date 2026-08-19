@@ -244,10 +244,11 @@ assert.equal(gluedParse.lineItems[2].quantity, 3, 'quantity 3, not the 42-per-ca
 assert.equal(gluedParse.lineItems[2].unitPrice, 45.27);
 assert.equal(gluedParse.lineItems[2].extendedPrice, 135.81);
 
-// If a line's SKU isn't in the catalog (e.g. an item not yet added to
-// Smartsheet, or a promo line), there's no boundary marker for it in the
-// text — the previous *matched* item's window must not run past it and
-// steal its price as its own.
+// If a line's SKU isn't in the catalog yet (e.g. an item not yet added to
+// Smartsheet), it should still surface as its own uncataloged line item via
+// the generic-SKU fallback (see GENERIC_SKU_PATTERN) rather than vanishing —
+// and, critically, the previous *matched* item's window must not run past
+// it and steal its price as its own.
 const unmatchedTrailingFixture = `
 TWG09180
 Twinings of London Lemon & Ginger Herbal Tea Bag - 1.3 oz - 25 / Box
@@ -264,10 +265,14 @@ FREE
 Items: $8.82
 `;
 const unmatchedTrailingParse = parseInvoiceText(unmatchedTrailingFixture, ['TWG09180']);
-assert.equal(unmatchedTrailingParse.lineItems.length, 1, 'only the catalog SKU should produce a line item');
+assert.equal(unmatchedTrailingParse.lineItems.length, 2, 'both the catalog SKU and the uncataloged one should produce a line item');
 assert.equal(unmatchedTrailingParse.lineItems[0].quantity, 2, 'quantity should be this item\'s own, not stolen from the next uncataloged item');
 assert.equal(unmatchedTrailingParse.lineItems[0].unitPrice, 4.41);
 assert.equal(unmatchedTrailingParse.lineItems[0].extendedPrice, 8.82);
+assert.equal(unmatchedTrailingParse.lineItems[1].sku, 'NEWITEM99', 'uncataloged trailing item should surface via the generic fallback, not vanish');
+assert.equal(unmatchedTrailingParse.lineItems[1].description, 'Some New Product Not Yet In The Catalog');
+assert.equal(unmatchedTrailingParse.lineItems[1].quantity, 1);
+assert.equal(unmatchedTrailingParse.lineItems[1].unitPrice, 0, '"FREE" should parse as $0.00');
 
 // Real Tejas invoice text (pasted by the user from the app's "extracted
 // text" troubleshooting panel). Unlike Gateway, Tejas prices have no `$`
@@ -518,6 +523,34 @@ const postIt = partialParse.lineItems.find((l) => l.sku === 'MMM62218SSMIACP');
 assert.equal(matchLineItemToCatalog(postIt, fakeCatalogGateway), null, 'uncataloged item should report no match, not a wrong guess');
 const coffee2 = partialParse.lineItems.find((l) => l.sku === 'FOL06430');
 assert.equal(matchLineItemToCatalog(coffee2, fakeCatalogGateway)?.rowId, 10, 'cataloged item should still match exactly as before');
+
+// Real bug report: a Gateway invoice whose only line item's SKU
+// (DURAACTBULK36, a bulk-pack code) isn't in the catalog and has no digit
+// anywhere near the start of the token (its only digits are the trailing
+// "36") — GENERIC_SKU_PATTERN used to only look within roughly the first 7
+// characters for a digit, so this SKU was invisible to it, and with no
+// catalog match either, the entire invoice parsed to zero line items
+// (vendor/dates/total still extracted fine, making the failure easy to
+// miss — "it only gathers extracted text but not line items").
+const bulkPackFixture = `
+# SKU Description And Comments Qty Unit Price Extended
+1 DURAACTBULK36 BATTERY,COPPERTOP,AA,36PK 12 Pack $23.89 $286.68
+Items: $286.68
+Shipping: $0.00
+Subtotal: $286.68
+`;
+const bulkPackParse = parseInvoiceText(bulkPackFixture, ['SOMEOTHERSKU123']); // catalog doesn't have this SKU
+assert.equal(bulkPackParse.lineItems.length, 1, 'the line item must surface even though its SKU has no digit near the start');
+assert.equal(bulkPackParse.lineItems[0].sku, 'DURAACTBULK36');
+assert.equal(bulkPackParse.lineItems[0].quantity, 12, 'quantity should be 12, not the 36-pack size embedded in the description');
+assert.equal(bulkPackParse.lineItems[0].unitPrice, 23.89);
+assert.equal(bulkPackParse.lineItems[0].extendedPrice, 286.68);
+assert.ok(
+  bulkPackParse.lineItems[0].description.startsWith('BATTERY'),
+  'description should be the product text, not swallowed by SKU matching'
+);
+// lineItems.length === 1 above already confirms "36PK" (part of the comma-
+// separated description) wasn't itself mistaken for a second SKU.
 
 // extractInvoiceTotal via parseInvoiceText: Tejas has no "Items:" line, so it
 // should fall back to "Sub-Total" (no $ sign, matches PLAIN_PRICE_LINE style).
