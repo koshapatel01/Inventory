@@ -1,8 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { STAFF, VENDORS } from '@/lib/config';
+import { STAFF, VENDORS, OTHER_VENDOR } from '@/lib/config';
 import { computeEstimatedTotal } from '@/lib/inventory';
+
+/** The vendor actually recorded for a row: the picked one, or whatever was
+ *  typed when "Other" is selected. */
+function effectiveVendorFor(row) {
+  return row.vendor === OTHER_VENDOR ? String(row.otherVendor || '').trim() : row.vendor;
+}
 
 // The vendor on every parsed line should always match the vendor detected
 // for the invoice as a whole — a single PDF only ever comes from one vendor,
@@ -126,7 +132,8 @@ export default function InvoiceUpload() {
         updateRow(i, { result: 'Unit price must be non-negative.' });
         continue;
       }
-      if (!row.vendor) {
+      const rowVendor = effectiveVendorFor(row);
+      if (!rowVendor) {
         updateRow(i, { result: 'Vendor required.' });
         continue;
       }
@@ -143,7 +150,7 @@ export default function InvoiceUpload() {
           const manualRes = await fetch('/api/inventory/manual', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sku: row.sku, name: row.manualItemName, vendor: row.vendor }),
+            body: JSON.stringify({ sku: row.sku, name: row.manualItemName, vendor: rowVendor }),
           });
           const manualData = await manualRes.json().catch(() => ({}));
           if (!manualRes.ok) throw new Error(manualData.error || 'Could not create item.');
@@ -160,7 +167,7 @@ export default function InvoiceUpload() {
             itemNumber: row.sku,
             quantity: row.quantity,
             orderedBy,
-            vendor: row.vendor,
+            vendor: rowVendor,
             link: row.orderLink || '',
             unitPrice: row.unitPrice,
             notes: row.notes,
@@ -313,14 +320,26 @@ export default function InvoiceUpload() {
                           vendorLocked ? (
                             <span>{row.vendor}</span>
                           ) : (
-                            <select
-                              value={row.vendor}
-                              disabled={!!row.result}
-                              onChange={(e) => updateRow(i, { vendor: e.target.value })}
-                            >
-                              <option value="">Vendor?</option>
-                              {VENDORS.map((v) => <option key={v} value={v}>{v}</option>)}
-                            </select>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <select
+                                value={row.vendor}
+                                disabled={!!row.result}
+                                onChange={(e) => updateRow(i, { vendor: e.target.value })}
+                              >
+                                <option value="">Vendor?</option>
+                                {VENDORS.map((v) => <option key={v} value={v}>{v}</option>)}
+                                <option value={OTHER_VENDOR}>Other…</option>
+                              </select>
+                              {row.vendor === OTHER_VENDOR && (
+                                <input
+                                  type="text"
+                                  placeholder="Type the vendor"
+                                  value={row.otherVendor || ''}
+                                  disabled={!!row.result}
+                                  onChange={(e) => updateRow(i, { otherVendor: e.target.value })}
+                                />
+                              )}
+                            </div>
                           )
                         ) : '—'}
                       </td>

@@ -2,14 +2,18 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CATEGORIES, STAFF, TRANSFER_DESTINATIONS, VENDORS } from '@/lib/config';
+import { CATEGORIES, STAFF, TRANSFER_DESTINATIONS, VENDORS, OTHER_VENDOR } from '@/lib/config';
 import { filterItems, isLowStock, totalQuantity, summarize, deriveItemStatus } from '@/lib/inventory';
 
 const LOCATION_QTY_FIELDS = [
-  { field: 'qtyS755', label: 'Qty S755' },
-  { field: 'qtyS821', label: 'Qty S821' },
-  { field: 'qtyTls', label: 'Qty TLS' },
+  { field: 'qtyS755', label: 'S755' },
+  { field: 'qtyS821', label: 'S821' },
+  { field: 'qtyTls', label: 'TLS' },
 ];
+
+// Every column the table renders, so the expanded form row beneath an item can
+// span the full width without this count drifting out of sync.
+const COLUMN_COUNT = 11;
 
 export default function InventoryClient({ initialItems }) {
   const [items, setItems] = useState(initialItems);
@@ -167,12 +171,11 @@ export default function InventoryClient({ initialItems }) {
       )}
 
       <div className="table-wrap">
-        <table>
+        <table className="inventory-table">
           <thead>
             <tr>
-              <th>SKU</th>
               <th>Item</th>
-              <th>Category</th>
+              <th>Unit</th>
               {LOCATION_QTY_FIELDS.map(({ field, label }) => (
                 <th key={field} className="num">{label}</th>
               ))}
@@ -186,16 +189,25 @@ export default function InventoryClient({ initialItems }) {
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={12} className="empty">No items match your filters.</td></tr>
+              <tr><td colSpan={COLUMN_COUNT} className="empty">No items match your filters.</td></tr>
             )}
             {filtered.map((item) => {
               const low = isLowStock(item);
               const busy = savingRow === item.rowId;
-              return (
+              const transferring = transferRow === item.rowId;
+              const ordering = orderRow === item.rowId;
+              return [
                 <tr key={item.rowId} className={low ? 'row-low' : ''}>
-                  <td className="mono">{item.sku}</td>
-                  <td>{item.name}</td>
-                  <td>{item.category}</td>
+                  {/* SKU and category ride along under the item name instead of
+                      taking their own columns — same information, far less width. */}
+                  <td className="cell-item">
+                    <span className="item-name">{item.name}</span>
+                    <span className="item-meta">
+                      <span className="mono">{item.sku}</span>
+                      {item.category ? ` · ${item.category}` : ''}
+                    </span>
+                  </td>
+                  <td className="cell-unit">{item.containerType || '—'}</td>
                   {LOCATION_QTY_FIELDS.map(({ field }) => (
                     <td className="num" key={field}>
                       <input
@@ -219,59 +231,72 @@ export default function InventoryClient({ initialItems }) {
                   </td>
                   <td className="notes">{item.notes}</td>
                   <td>
-                    {transferRow === item.rowId ? (
-                      <TransferForm
-                        item={item}
-                        busy={busy}
-                        onCancel={() => setTransferRow(null)}
-                        onSubmit={(payload) => submitTransfer(item, payload)}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        className="transfer-btn"
-                        disabled={busy}
-                        onClick={() => setTransferRow(item.rowId)}
-                      >
-                        Transfer
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className={`transfer-btn${transferring ? ' is-active' : ''}`}
+                      disabled={busy}
+                      onClick={() => {
+                        setOrderRow(null);
+                        setTransferRow(transferring ? null : item.rowId);
+                      }}
+                    >
+                      Transfer
+                    </button>
                   </td>
                   <td>
-                    {orderRow === item.rowId ? (
-                      <OrderForm
-                        item={item}
-                        busy={busy}
-                        onCancel={() => setOrderRow(null)}
-                        onSubmit={(payload) => submitOrder(item, payload)}
-                      />
-                    ) : (
-                      <div className="transfer-form">
-                        <button
-                          type="button"
-                          className="transfer-btn"
-                          disabled={busy}
-                          onClick={() => setOrderRow(item.rowId)}
-                        >
-                          Place Order
-                        </button>
-                        <Link href={`/orders?rowId=${item.rowId}`}>History</Link>
-                      </div>
-                    )}
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className={`transfer-btn${ordering ? ' is-active' : ''}`}
+                        disabled={busy}
+                        onClick={() => {
+                          setTransferRow(null);
+                          setOrderRow(ordering ? null : item.rowId);
+                        }}
+                      >
+                        Place Order
+                      </button>
+                      <Link href={`/orders?rowId=${item.rowId}`}>History</Link>
+                    </div>
                   </td>
-                </tr>
-              );
+                </tr>,
+                // The transfer/order forms open in their own full-width row
+                // beneath the item rather than inside a narrow cell — that's
+                // what keeps the table from growing wide enough to need
+                // sideways scrolling just to fill one in.
+                (transferring || ordering) && (
+                  <tr key={`${item.rowId}-form`} className="form-row">
+                    <td colSpan={COLUMN_COUNT}>
+                      {transferring ? (
+                        <TransferForm
+                          item={item}
+                          busy={busy}
+                          onCancel={() => setTransferRow(null)}
+                          onSubmit={(payload) => submitTransfer(item, payload)}
+                        />
+                      ) : (
+                        <OrderForm
+                          item={item}
+                          busy={busy}
+                          onCancel={() => setOrderRow(null)}
+                          onSubmit={(payload) => submitOrder(item, payload)}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                ),
+              ];
             })}
           </tbody>
         </table>
       </div>
 
       <p className="footnote">
-        Quantities and transfers are stored locally on this machine — Smartsheet stays a
-        read-only catalog and is never written to. Status is automatic: Ordered while a
-        placed order hasn’t fully arrived, otherwise OK/Low from current stock vs minimum.
-        Low-stock rows are highlighted; the daily email to ITPMO@UHD.EDU is handled by
-        Smartsheet’s alert rules.
+        Quantities are counted in each item’s unit of measure — the Unit column, from Smartsheet’s
+        Container Type. Quantities and transfers are stored locally; Smartsheet stays a read-only
+        catalog and is never written to. Status is automatic: Ordered while a placed order hasn’t
+        fully arrived, otherwise OK/Low from current stock vs minimum. Low-stock rows are
+        highlighted; the daily email to ITPMO@UHD.EDU is handled by Smartsheet’s alert rules.
       </p>
     </section>
   );
@@ -281,6 +306,27 @@ const STATUS_BADGE_CLASS = { OK: 'status-ok', Low: 'status-low', Ordered: 'statu
 
 function StatusBadge({ status }) {
   return <span className={`status-badge ${STATUS_BADGE_CLASS[status] || ''}`}>{status}</span>;
+}
+
+/** Shared chrome for the two inline forms: a heading naming the item (and the
+ *  unit its quantities are counted in), the fields, then the buttons. */
+function FormShell({ title, item, children, onCancel, busy, submitLabel }) {
+  return (
+    <div className="inline-form">
+      <div className="inline-form-head">
+        <strong>{title}</strong>
+        <span className="inline-form-item">
+          {item.name}
+          {item.containerType ? ` · counted in ${item.containerType}` : ''}
+        </span>
+      </div>
+      <div className="inline-form-fields">{children}</div>
+      <div className="inline-form-actions">
+        <button type="submit" disabled={busy}>{busy ? 'Saving…' : submitLabel}</button>
+        <button type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
 }
 
 function TransferForm({ item, busy, onCancel, onSubmit }) {
@@ -296,25 +342,32 @@ function TransferForm({ item, busy, onCancel, onSubmit }) {
   }
 
   return (
-    <form className="transfer-form" onSubmit={submit}>
-      <input
-        type="number"
-        min="1"
-        className="qty-input"
-        placeholder="Qty"
-        value={quantity}
-        disabled={busy}
-        onChange={(e) => setQuantity(e.target.value)}
-      />
-      <select value={destination} disabled={busy} onChange={(e) => setDestination(e.target.value)}>
-        {TRANSFER_DESTINATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-      </select>
-      <select value={person} disabled={busy} onChange={(e) => setPerson(e.target.value)} required>
-        <option value="">Who?</option>
-        {STAFF.map((s) => <option key={s} value={s}>{s}</option>)}
-      </select>
-      <button type="submit" disabled={busy}>Send</button>
-      <button type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+    <form onSubmit={submit}>
+      <FormShell title="Transfer from S755" item={item} busy={busy} onCancel={onCancel} submitLabel="Send">
+        <label>
+          Quantity{item.containerType ? ` (${item.containerType})` : ''}
+          <input
+            type="number"
+            min="1"
+            value={quantity}
+            disabled={busy}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+        </label>
+        <label>
+          Destination
+          <select value={destination} disabled={busy} onChange={(e) => setDestination(e.target.value)}>
+            {TRANSFER_DESTINATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </label>
+        <label>
+          Transferred by
+          <select value={person} disabled={busy} onChange={(e) => setPerson(e.target.value)} required>
+            <option value="">Who?</option>
+            {STAFF.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </label>
+      </FormShell>
     </form>
   );
 }
@@ -326,10 +379,17 @@ function OrderForm({ item, busy, onCancel, onSubmit }) {
   const catalogVendor = VENDORS.includes(item.vendor) ? item.vendor : '';
   const [quantity, setQuantity] = useState(item.minimum ?? '');
   const [vendor, setVendor] = useState(catalogVendor);
+  const [otherVendor, setOtherVendor] = useState('');
   const [link, setLink] = useState(catalogVendor ? (item.orderLink || '') : '');
   const [unitPrice, setUnitPrice] = useState('');
   const [orderedBy, setOrderedBy] = useState('');
   const [notes, setNotes] = useState('');
+
+  const isOther = vendor === OTHER_VENDOR;
+  // What actually gets recorded: the picked vendor, or whatever was typed when
+  // "Other" is selected — the API stores any non-empty vendor string, so a
+  // one-off vendor needs no config change.
+  const effectiveVendor = isOther ? otherVendor.trim() : vendor;
 
   function handleVendorChange(v) {
     setVendor(v);
@@ -342,59 +402,92 @@ function OrderForm({ item, busy, onCancel, onSubmit }) {
     const price = Number(unitPrice);
     if (!Number.isFinite(qty) || qty <= 0) return;
     if (!Number.isFinite(price) || price < 0) return;
-    if (!vendor || !orderedBy) return;
-    onSubmit({ quantity: qty, vendor, link: link.trim(), unitPrice: price, orderedBy, notes: notes.trim() });
+    if (!effectiveVendor || !orderedBy) return;
+    onSubmit({
+      quantity: qty,
+      vendor: effectiveVendor,
+      link: link.trim(),
+      unitPrice: price,
+      orderedBy,
+      notes: notes.trim(),
+    });
   }
 
-  const needsLink = vendor && vendor !== catalogVendor;
+  const needsLink = effectiveVendor && effectiveVendor !== catalogVendor;
 
   return (
-    <form className="transfer-form order-form" onSubmit={submit}>
-      <input
-        type="number"
-        min="1"
-        className="qty-input"
-        placeholder="Qty"
-        value={quantity}
-        disabled={busy}
-        onChange={(e) => setQuantity(e.target.value)}
-      />
-      <select value={vendor} disabled={busy} onChange={(e) => handleVendorChange(e.target.value)} required>
-        <option value="">Vendor?</option>
-        {VENDORS.map((v) => <option key={v} value={v}>{v}</option>)}
-      </select>
-      <input
-        type="text"
-        placeholder={needsLink ? 'Enter link for this vendor' : 'Order link'}
-        title={needsLink ? 'This vendor differs from the catalog vendor — enter the order link manually.' : undefined}
-        value={link}
-        disabled={busy}
-        required={needsLink}
-        onChange={(e) => setLink(e.target.value)}
-      />
-      <input
-        type="number"
-        min="0"
-        step="0.01"
-        className="qty-input"
-        placeholder="Unit $"
-        value={unitPrice}
-        disabled={busy}
-        onChange={(e) => setUnitPrice(e.target.value)}
-      />
-      <select value={orderedBy} disabled={busy} onChange={(e) => setOrderedBy(e.target.value)} required>
-        <option value="">Who?</option>
-        {STAFF.map((s) => <option key={s} value={s}>{s}</option>)}
-      </select>
-      <input
-        type="text"
-        placeholder="Notes (optional)"
-        value={notes}
-        disabled={busy}
-        onChange={(e) => setNotes(e.target.value)}
-      />
-      <button type="submit" disabled={busy}>Send</button>
-      <button type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+    <form onSubmit={submit}>
+      <FormShell title="Place order" item={item} busy={busy} onCancel={onCancel} submitLabel="Place Order">
+        <label>
+          Quantity{item.containerType ? ` (${item.containerType})` : ''}
+          <input
+            type="number"
+            min="1"
+            value={quantity}
+            disabled={busy}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+        </label>
+        <label>
+          Vendor
+          <select value={vendor} disabled={busy} onChange={(e) => handleVendorChange(e.target.value)} required>
+            <option value="">Vendor?</option>
+            {VENDORS.map((v) => <option key={v} value={v}>{v}</option>)}
+            <option value={OTHER_VENDOR}>Other…</option>
+          </select>
+        </label>
+        {isOther && (
+          <label>
+            Vendor name
+            <input
+              type="text"
+              placeholder="Type the vendor"
+              value={otherVendor}
+              disabled={busy}
+              required
+              onChange={(e) => setOtherVendor(e.target.value)}
+            />
+          </label>
+        )}
+        <label>
+          Unit price ($)
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={unitPrice}
+            disabled={busy}
+            onChange={(e) => setUnitPrice(e.target.value)}
+          />
+        </label>
+        <label>
+          Ordered by
+          <select value={orderedBy} disabled={busy} onChange={(e) => setOrderedBy(e.target.value)} required>
+            <option value="">Who?</option>
+            {STAFF.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </label>
+        <label className="grow">
+          Order link
+          <input
+            type="text"
+            placeholder={needsLink ? 'Enter link for this vendor' : 'Order link'}
+            title={needsLink ? 'This vendor differs from the catalog vendor — enter the order link manually.' : undefined}
+            value={link}
+            disabled={busy}
+            onChange={(e) => setLink(e.target.value)}
+          />
+        </label>
+        <label className="grow">
+          Notes (optional)
+          <input
+            type="text"
+            value={notes}
+            disabled={busy}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </label>
+      </FormShell>
     </form>
   );
 }
