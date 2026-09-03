@@ -16,6 +16,7 @@ import {
   summarize,
 } from '../lib/inventory.js';
 import { parseInvoiceText, matchLineItemToCatalog } from '../lib/invoiceParser.js';
+import { escapeCsvValue, toCsv, csvFilename } from '../lib/csv.js';
 import {
   extendedTotalFor,
   isMissingPrice,
@@ -657,5 +658,37 @@ assert.equal(ranked[1].totalSpent, 30);
 assert.equal(ranked[1].timesOrdered, 2);
 assert.equal(ranked[2].item, 'Staples');
 assert.equal(ranked[2].flaggedCount, 0);
+
+// ── CSV export (the "Export to Excel" buttons on each log) ───────────
+// Escaping is the whole risk here: an unescaped comma or quote silently
+// shifts every later column of that row when the file is opened in Excel.
+assert.equal(escapeCsvValue('plain'), 'plain');
+assert.equal(escapeCsvValue(null), '', 'null becomes an empty field, not "null"');
+assert.equal(escapeCsvValue(undefined), '');
+assert.equal(escapeCsvValue(0), '0', 'zero is kept, not treated as empty');
+assert.equal(escapeCsvValue('Post-it, Medium'), '"Post-it, Medium"', 'commas force quoting');
+assert.equal(escapeCsvValue('9" Plates'), '"9"" Plates"', 'quotes are doubled and the field quoted');
+assert.equal(escapeCsvValue('line one\nline two'), '"line one\nline two"', 'newlines force quoting');
+
+const csvColumns = [
+  { key: 'date', label: 'Date' },
+  { key: 'item', label: 'Item' },
+  { key: 'qty', label: 'Qty' },
+  { key: 'total', label: 'Total', value: (r) => (r.qty * r.price).toFixed(2) },
+];
+const csvRows = [
+  { date: '2026-08-19', item: 'Folgers Coffee', qty: 3, price: 45.27 },
+  { date: '2026-08-19', item: 'Plates, 9"', qty: 2, price: 1.5 },
+];
+const csv = toCsv(csvColumns, csvRows);
+const csvLines = csv.split('\r\n');
+assert.equal(csvLines.length, 3, 'header plus one line per row');
+assert.equal(csvLines[0], 'Date,Item,Qty,Total');
+assert.equal(csvLines[1], '2026-08-19,Folgers Coffee,3,135.81', 'derived column is computed, not read as a property');
+assert.equal(csvLines[2], '2026-08-19,"Plates, 9""",2,3.00', 'a value with both a comma and a quote stays one field');
+assert.equal(toCsv(csvColumns, []).split('\r\n').length, 1, 'no rows still emits the header');
+
+assert.equal(csvFilename('Order History', new Date('2026-08-19T12:00:00Z')), 'order-history-2026-08-19.csv');
+assert.equal(csvFilename('spending-by-item', new Date('2026-01-05T00:00:00Z')), 'spending-by-item-2026-01-05.csv');
 
 console.log('All inventory-logic checks passed ✓');

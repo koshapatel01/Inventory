@@ -1,8 +1,20 @@
 import Link from 'next/link';
 import { getTransactions } from '@/lib/localStore';
+import ExportButton from '@/components/ExportButton';
 
 // Local-only receiving log (deliveries logged against orders) — never touches Smartsheet.
 export const dynamic = 'force-dynamic';
+
+const EXPORT_COLUMNS = [
+  { key: 'date', label: 'Date' },
+  { key: 'type', label: 'Type' },
+  { key: 'item', label: 'Item' },
+  { key: 'quantity', label: 'Qty' },
+  { key: 'source', label: 'From' },
+  { key: 'destination', label: 'To' },
+  { key: 'person', label: 'Person' },
+  { key: 'orderId', label: 'Order ID' },
+];
 
 export default async function ReceivingLogPage() {
   const transactions = await getTransactions();
@@ -14,8 +26,15 @@ export default async function ReceivingLogPage() {
         <p className="subtitle"><Link href="/">← Back to inventory</Link></p>
       </header>
 
+      <div className="log-toolbar">
+        <span className="log-count">
+          {transactions.length} deliver{transactions.length === 1 ? 'y' : 'ies'}
+        </span>
+        <ExportButton columns={EXPORT_COLUMNS} rows={transactions} filename="receiving-log" />
+      </div>
+
       <div className="table-wrap">
-        <table>
+        <table className="log-table">
           <thead>
             <tr>
               <th>Date</th>

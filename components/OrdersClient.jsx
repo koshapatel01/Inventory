@@ -2,6 +2,35 @@
 
 import { useState } from 'react';
 import { deriveOrderStatus } from '@/lib/inventory';
+import ExportButton from '@/components/ExportButton';
+
+// Every column the table renders, so the receive-form row beneath an order can
+// span the full width without this count drifting out of sync.
+const COLUMN_COUNT = 9;
+
+// The export carries every field, including ones the compact on-screen table
+// folds together (or leaves out entirely, like the invoice link) — a
+// spreadsheet has room the screen doesn't.
+const EXPORT_COLUMNS = [
+  { key: 'orderDate', label: 'Order Date' },
+  { key: 'itemName', label: 'Item' },
+  { key: 'itemNumber', label: 'Item #' },
+  { key: 'vendor', label: 'Vendor' },
+  { key: 'quantityOrdered', label: 'Qty Ordered' },
+  { key: 'quantityReceived', label: 'Qty Received' },
+  { key: 'unitPrice', label: 'Unit Price', value: (o) => Number(o.unitPrice || 0).toFixed(2) },
+  { key: 'estimatedTotal', label: 'Est. Total', value: (o) => Number(o.estimatedTotal || 0).toFixed(2) },
+  { key: 'status', label: 'Status' },
+  { key: 'orderedBy', label: 'Ordered By' },
+  { key: 'dateReceived', label: 'Date Received' },
+  { key: 'notes', label: 'Notes' },
+  { key: 'link', label: 'Order Link' },
+  {
+    key: 'invoiceFileId',
+    label: 'Invoice',
+    value: (o) => (o.invoiceFileId ? `/api/invoices/${o.invoiceFileId}` : ''),
+  },
+];
 
 export default function OrdersClient({ initialOrders }) {
   const [orders, setOrders] = useState(initialOrders);
@@ -72,89 +101,109 @@ export default function OrdersClient({ initialOrders }) {
         </div>
       )}
 
+      <div className="log-toolbar">
+        <span className="log-count">{orders.length} order{orders.length === 1 ? '' : 's'}</span>
+        <ExportButton columns={EXPORT_COLUMNS} rows={orders} filename="order-history" />
+      </div>
+
       <div className="table-wrap">
-        <table>
+        <table className="log-table">
           <thead>
             <tr>
-              <th>Order Date</th>
+              <th>Date</th>
               <th>Item</th>
-              <th>Item #</th>
               <th>Vendor</th>
-              <th className="num">Qty Ordered</th>
-              <th className="num">Qty Received</th>
-              <th className="num">Unit Price</th>
-              <th className="num">Est. Total</th>
+              <th className="num">Qty</th>
+              <th className="num">Unit</th>
+              <th className="num">Total</th>
               <th>Status</th>
-              <th>Ordered By</th>
-              <th>Link</th>
-              <th>Date Received</th>
               <th>Notes</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {orders.length === 0 && (
-              <tr><td colSpan={14} className="empty">No orders recorded yet.</td></tr>
+              <tr><td colSpan={COLUMN_COUNT} className="empty">No orders recorded yet.</td></tr>
             )}
             {orders.map((order) => {
               const busy = busyId === order.id;
               const canAct = order.status === 'Ordered' || order.status === 'Partially Received';
-              return (
+              const isReceiving = receivingId === order.id;
+              const fullyReceived = order.quantityReceived >= order.quantityOrdered;
+              return [
                 <tr key={order.id}>
-                  <td>{order.orderDate}</td>
-                  <td>{order.itemName}</td>
-                  <td className="mono">{order.itemNumber}</td>
-                  <td>{order.vendor}</td>
-                  <td className="num">{order.quantityOrdered}</td>
-                  <td className="num">{order.quantityReceived}</td>
+                  {/* Ordered and received dates share a cell — they're the same
+                      fact (when this order moved) and rarely both needed at a glance. */}
+                  <td className="cell-stack">
+                    <span>{order.orderDate}</span>
+                    {order.dateReceived && (
+                      <span className="cell-sub">recv {order.dateReceived}</span>
+                    )}
+                  </td>
+                  <td className="cell-item">
+                    <span className="item-name">{order.itemName}</span>
+                    <span className="item-meta">
+                      <span className="mono">{order.itemNumber}</span>
+                      {order.link && <> · <a href={order.link} target="_blank" rel="noreferrer">Link</a></>}
+                      {order.invoiceFileId && (
+                        <> · <a href={`/api/invoices/${order.invoiceFileId}`} target="_blank" rel="noreferrer">Invoice</a></>
+                      )}
+                    </span>
+                  </td>
+                  <td className="cell-stack">
+                    <span>{order.vendor}</span>
+                    <span className="cell-sub">by {order.orderedBy}</span>
+                  </td>
+                  <td className="num">
+                    <span className={fullyReceived ? '' : 'qty-partial'}>
+                      {order.quantityReceived}/{order.quantityOrdered}
+                    </span>
+                  </td>
                   <td className="num">{order.unitPrice.toFixed(2)}</td>
                   <td className="num">{order.estimatedTotal.toFixed(2)}</td>
-                  <td>{order.status}</td>
-                  <td>{order.orderedBy}</td>
-                  <td>
-                    {order.link && (
-                      <a href={order.link} target="_blank" rel="noreferrer">Link</a>
-                    )}
-                    {order.link && order.invoiceFileId && ' · '}
-                    {order.invoiceFileId && (
-                      <a href={`/api/invoices/${order.invoiceFileId}`} target="_blank" rel="noreferrer">
-                        View Invoice
-                      </a>
-                    )}
-                    {!order.link && !order.invoiceFileId && '—'}
-                  </td>
-                  <td>{order.dateReceived || '—'}</td>
+                  <td><OrderStatusBadge status={order.status} /></td>
                   <td className="notes">{order.notes}</td>
                   <td>
                     {canAct ? (
-                      receivingId === order.id ? (
-                        <ReceiveForm
-                          order={order}
-                          busy={busy}
-                          onCancel={() => setReceivingId(null)}
-                          onSubmit={(payload) => receive(order, payload)}
-                        />
-                      ) : (
-                        <div className="transfer-form">
-                          <button
-                            type="button"
-                            className="transfer-btn"
-                            disabled={busy}
-                            onClick={() => setReceivingId(order.id)}
-                          >
-                            Receive
-                          </button>
-                          <button type="button" disabled={busy} onClick={() => cancel(order)}>
-                            Cancel Order
-                          </button>
-                        </div>
-                      )
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className={`transfer-btn${isReceiving ? ' is-active' : ''}`}
+                          disabled={busy}
+                          onClick={() => setReceivingId(isReceiving ? null : order.id)}
+                        >
+                          Receive
+                        </button>
+                        <button
+                          type="button"
+                          className="transfer-btn"
+                          disabled={busy}
+                          onClick={() => cancel(order)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     ) : (
                       '—'
                     )}
                   </td>
-                </tr>
-              );
+                </tr>,
+                // Same approach as the inventory table: the receive form opens
+                // full-width beneath its order instead of inside a narrow
+                // cell, so the table never has to grow wide enough to scroll.
+                isReceiving && (
+                  <tr key={`${order.id}-form`} className="form-row">
+                    <td colSpan={COLUMN_COUNT}>
+                      <ReceiveForm
+                        order={order}
+                        busy={busy}
+                        onCancel={() => setReceivingId(null)}
+                        onSubmit={(payload) => receive(order, payload)}
+                      />
+                    </td>
+                  </tr>
+                ),
+              ];
             })}
           </tbody>
         </table>
@@ -163,9 +212,20 @@ export default function OrdersClient({ initialOrders }) {
   );
 }
 
+const ORDER_STATUS_CLASS = {
+  Received: 'status-ok',
+  Ordered: 'status-ordered',
+  'Partially Received': 'status-ordered',
+  Cancelled: 'status-low',
+};
+
+function OrderStatusBadge({ status }) {
+  return <span className={`status-badge ${ORDER_STATUS_CLASS[status] || ''}`}>{status}</span>;
+}
+
 function ReceiveForm({ order, busy, onCancel, onSubmit }) {
   const remaining = order.quantityOrdered - order.quantityReceived;
-  const [quantity, setQuantity] = useState('');
+  const [quantity, setQuantity] = useState(String(remaining));
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
 
@@ -177,32 +237,40 @@ function ReceiveForm({ order, busy, onCancel, onSubmit }) {
   }
 
   return (
-    <form className="transfer-form" onSubmit={submit}>
-      <input
-        type="number"
-        min="1"
-        max={remaining}
-        className="qty-input"
-        placeholder={`Qty (≤${remaining})`}
-        value={quantity}
-        disabled={busy}
-        onChange={(e) => setQuantity(e.target.value)}
-      />
-      <input
-        type="date"
-        value={date}
-        disabled={busy}
-        onChange={(e) => setDate(e.target.value)}
-      />
-      <input
-        type="text"
-        placeholder="Notes (optional)"
-        value={notes}
-        disabled={busy}
-        onChange={(e) => setNotes(e.target.value)}
-      />
-      <button type="submit" disabled={busy}>Send</button>
-      <button type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+    <form onSubmit={submit}>
+      <div className="inline-form">
+        <div className="inline-form-head">
+          <strong>Receive delivery</strong>
+          <span className="inline-form-item">
+            {order.itemName} · {remaining} of {order.quantityOrdered} still outstanding
+          </span>
+        </div>
+        <div className="inline-form-fields">
+          <label>
+            Quantity received
+            <input
+              type="number"
+              min="1"
+              max={remaining}
+              value={quantity}
+              disabled={busy}
+              onChange={(e) => setQuantity(e.target.value)}
+            />
+          </label>
+          <label>
+            Date received
+            <input type="date" value={date} disabled={busy} onChange={(e) => setDate(e.target.value)} />
+          </label>
+          <label className="grow">
+            Notes (optional)
+            <input type="text" value={notes} disabled={busy} onChange={(e) => setNotes(e.target.value)} />
+          </label>
+        </div>
+        <div className="inline-form-actions">
+          <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Log Delivery'}</button>
+          <button type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
     </form>
   );
 }

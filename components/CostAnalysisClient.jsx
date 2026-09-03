@@ -10,6 +10,20 @@ import {
   rankItemsBySpend,
 } from '@/lib/costAnalysis';
 import { formatCurrency, formatNumber, formatMonth } from '@/lib/format';
+import ExportButton from '@/components/ExportButton';
+
+// Exports the ranked table exactly as filtered on screen, with the raw numbers
+// (not the formatted currency strings) so they stay arithmetic in Excel.
+const RANKED_EXPORT_COLUMNS = [
+  { key: 'item', label: 'Item' },
+  { key: 'itemNumber', label: 'SKU' },
+  { key: 'category', label: 'Category' },
+  { key: 'totalSpent', label: 'Total Spent', value: (r) => r.totalSpent.toFixed(2) },
+  { key: 'totalQuantity', label: 'Qty Ordered' },
+  { key: 'timesOrdered', label: 'Times Ordered' },
+  { key: 'avgUnitPrice', label: 'Avg Unit Price', value: (r) => r.avgUnitPrice.toFixed(2) },
+  { key: 'flaggedCount', label: 'Orders Missing Price' },
+];
 
 // Coordinated colors for the two named categories; anything else (Manual Add,
 // Uncategorized) gets a neutral gray so Office/Breakroom stay visually
@@ -174,7 +188,14 @@ export default function CostAnalysisClient({ initialRecords, items, categories }
             <CategoryComparison office={officeTotal} breakroom={breakroomTotal} />
           </div>
 
-          <div className="table-wrap" data-tour="ranked-table" style={{ marginTop: 18 }}>
+          <div className="log-toolbar" style={{ marginTop: 18 }}>
+            <span className="log-count">
+              {ranked.length} item{ranked.length === 1 ? '' : 's'} ranked by spend
+            </span>
+            <ExportButton columns={RANKED_EXPORT_COLUMNS} rows={ranked} filename="spending-by-item" />
+          </div>
+
+          <div className="table-wrap" data-tour="ranked-table">
             <table>
               <thead>
                 <tr>

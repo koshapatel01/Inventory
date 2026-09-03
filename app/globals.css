@@ -436,3 +436,43 @@ tbody select { padding: 6px 8px; }
   .inline-form-fields label, .inline-form-fields label.grow { flex: 1 1 100%; }
   .inline-form-fields input, .inline-form-fields select { min-width: 100%; }
 }
+
+/* ── Log tables (orders / transfers / receiving) ────────────────────── */
+/* Same approach as the inventory table: related fields share a cell and the
+   receive form opens full-width beneath its row, so nothing needs sideways
+   scrolling to read or fill in. */
+.log-table .cell-item { white-space: normal; min-width: 180px; max-width: 320px; }
+.log-table .cell-stack { line-height: 1.35; }
+.log-table .cell-sub { display: block; font-size: 11.5px; color: var(--muted-light); margin-top: 2px; }
+.log-table .notes { white-space: normal; max-width: 200px; font-size: 12.5px; }
+.log-table .qty-partial { color: var(--uhd-red-dark); font-weight: 700; }
+.log-table .item-name { display: block; font-weight: 600; line-height: 1.35; }
+.log-table .item-meta { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted-light); }
+.log-table .item-meta .mono { font-size: 11.5px; }
+.log-table thead th { padding-left: 10px; padding-right: 10px; }
+.log-table tbody td { padding-left: 10px; padding-right: 10px; }
+
+/* ── Log toolbar + export ──────────────────────────────────────────── */
+.log-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.log-count { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.export-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 8px 15px; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  transition: all .12s ease;
+}
+.export-btn:hover:not(:disabled) {
+  border-color: var(--ok); color: var(--ok); background: var(--ok-soft);
+}
+.export-btn:disabled { opacity: .45; cursor: default; }
+.export-count {
+  font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: var(--bg); color: var(--muted);
+}
+.export-btn:hover:not(:disabled) .export-count { background: #fff; color: var(--ok); }
